@@ -404,7 +404,17 @@ class PrefectEventsClient(EventsClient):
         EVENT_WEBSOCKET_CHECKPOINTS.labels(self.client_name).inc()
 
     async def _emit(self, event: Event) -> None:
-        self._log_debug("Emitting event id=%s.", event.id)
+        self._log_debug(f"Emitting event id={event.id}, event {event}.")
+        
+        # Log detailed event information
+        logger.debug(
+            f"STLOGGING: EVENTS CLIENT: Processing event emission: "
+            f"type='{event.event}', id={event.id}, "
+            f"resource_id='{event.resource.get('prefect.resource.id', 'unknown')}', "
+            f"occurred={event.occurred.isoformat() if event.occurred else 'None'}, "
+            f"payload_size={len(str(event.payload)) if event.payload else 0}, "
+            f"related_resources={len(event.related) if event.related else 0}"
+        )
 
         self._unconfirmed_events.append(event)
 
