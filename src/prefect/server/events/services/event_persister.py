@@ -126,6 +126,8 @@ async def create_handler(
     async def flush() -> None:
         nonlocal consecutive_failures
 
+        logger.debug(f"Persisting {queue.qsize()} events...")
+
         async with flush_lock:
             if queue.qsize() == 0:
                 return
@@ -139,7 +141,7 @@ async def create_handler(
                     queue_max_size,
                 )
 
-            logger.debug("Persisting %d events...", queue.qsize())
+            logger.debug("Persisting %d events (2) ...", queue.qsize())
 
             batch: List[ReceivedEvent] = []
 
@@ -152,7 +154,9 @@ async def create_handler(
                     await session.commit()
                     logger.debug("Finished persisting events.")
                     consecutive_failures = 0  # Reset on success
+                    logger.debug("Finished persisting events.")  # TODO write events ids
             except Exception:
+                logger.debug("Error flushing events, restoring to queue", exc_info=True)
                 consecutive_failures += 1
                 if consecutive_failures >= max_flush_retries:
                     logger.error(
@@ -188,10 +192,11 @@ async def create_handler(
         event = ReceivedEvent.model_validate_json(message.data)
 
         logger.debug(
-            "Received event: %s with id: %s for resource: %s",
+            "Received event: %s with id: %s for resource: %s, event=%s",
             event.event,
             event.id,
             event.resource.get("prefect.resource.id"),
+            event,
         )
 
         try:

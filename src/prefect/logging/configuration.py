@@ -79,12 +79,15 @@ def ensure_logging_setup() -> None:
 
 
 def setup_logging(incremental: bool | None = None) -> dict[str, Any]:
+    logger = logging.getLogger(__name__)
     """
     Sets up logging.
 
     Returns the config used.
     """
     global PROCESS_LOGGING_CONFIG
+    # print("========================== LOGGING: setup logging configuration")
+    # logger.error("========================== LOGGING: setup logging configuration")
 
     # If the user has specified a logging path and it exists we will ignore the
     # default entirely rather than dealing with complex merging
@@ -95,10 +98,15 @@ def setup_logging(incremental: bool | None = None) -> dict[str, Any]:
             else DEFAULT_LOGGING_SETTINGS_PATH
         )
     )
+    # print(f"========================== LOGGING: config: {config}")
+    # logger.error(f"========================== LOGGING: config: {config}")
 
     incremental = (
         incremental if incremental is not None else bool(PROCESS_LOGGING_CONFIG)
     )
+
+    # print(f"========================== LOGGING: incremental: {incremental}")
+    # logger.error(f"========================== LOGGING: incremental: {incremental}")
 
     # Perform an incremental update if setup has already been run
     config.setdefault("incremental", incremental)
@@ -120,12 +128,18 @@ def setup_logging(incremental: bool | None = None) -> dict[str, Any]:
 
     try:
         logging.config.dictConfig(config)
-    except ValueError:
+        # print("========================== LOGGING: configured logging")
+        # logger.error("========================== LOGGING: configured logging")
+    except ValueError as ex:
         if incremental:
             setup_logging(incremental=False)
+        # print("========================== LOGGING: error configuring logging: {ex}")
+        # logger.error("========================== LOGGING: error configuring logging: {ex}")
 
     # Copy configuration of the 'prefect.extra' logger to the extra loggers
     extra_config = logging.getLogger("prefect.extra")
+    # print("========================== LOGGING: extra config: {extra_config}")
+    # logger.error("========================== LOGGING: extra config: {extra_config}")
 
     for logger_name in PREFECT_LOGGING_EXTRA_LOGGERS.value():
         logger = logging.getLogger(logger_name)
@@ -134,5 +148,15 @@ def setup_logging(incremental: bool | None = None) -> dict[str, Any]:
                 logger.addHandler(handler)
 
     PROCESS_LOGGING_CONFIG.update(config)
+
+    # get entire logging config
+    try:
+        logging_config = logging.root.manager.loggerDict
+        # print(f"=========================== LOGGING: config updated: {logging_config}")
+        # logger.error(f"=========================== LOGGING: config updated: {logging_config}")
+    except ValueError as ex:
+        pass
+        # print(f"=========================== LOGGING: error getting logging config: {ex}")
+        # logger.error(f"=========================== LOGGING: error getting logging config: {ex}")
 
     return config

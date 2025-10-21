@@ -414,6 +414,10 @@ class BaseTaskRunEngine(Generic[P, R]):
             message="Task rolled back as part of transaction",
         )
 
+        self.logger.debug(
+            f"STLOGGING: TASK ENGINE: Emitting rollback event for task run {self.task_run.id}, "
+            f"task_name='{self.task.name}', state transition: {self.state.type} -> RolledBack"
+        )
         self._last_event = emit_task_run_state_change_event(
             task_run=self.task_run,
             initial_state=self.state,
@@ -552,6 +556,13 @@ class SyncTaskRunEngine(BaseTaskRunEngine[P, R]):
         if not self.task_run:
             raise ValueError("Task run is not set")
 
+        # Log the task state transition attempt
+        self.logger.info(
+            f"STLOGGING: Task run {self.task_run.id} attempting state transition: "
+            f"{last_state.type if last_state else 'None'} -> {state.type} "
+            f"(force={force}, task_name='{self.task.name}')"
+        )
+
         self.task_run.state = new_state = state
 
         if last_state.timestamp == new_state.timestamp:
@@ -567,6 +578,14 @@ class SyncTaskRunEngine(BaseTaskRunEngine[P, R]):
         self.task_run.state_id = new_state.id
         self.task_run.state_type = new_state.type
         self.task_run.state_name = new_state.name
+        
+        # Log the task state transition result
+        self.logger.info(
+            f"STLOGGING: Task run {self.task_run.id} state transition result: "
+            f"{last_state.type if last_state else 'None'} -> {new_state.type} "
+            f"(state_name='{new_state.name}', message='{new_state.message or 'None'}', task_name='{self.task.name}')"
+        )
+        
         if last_state.is_running():
             self.task_run.total_run_time += new_state.timestamp - last_state.timestamp
 
@@ -589,12 +608,21 @@ class SyncTaskRunEngine(BaseTaskRunEngine[P, R]):
             link_state_to_task_run_result(new_state, result)
 
         # emit a state change event
+        self.logger.info(
+            f"STLOGGING: TASK ENGINE: Emitting state change event for task run {self.task_run.id}, "
+            f"task_name='{self.task.name}', state transition: "
+            f"{last_state.type if last_state else 'None'} -> {self.task_run.state.type}, "
+            f"final_state_name='{self.task_run.state.name}'"
+        )
         self._last_event = emit_task_run_state_change_event(
             task_run=self.task_run,
             initial_state=last_state,
             validated_state=self.task_run.state,
             follows=self._last_event,
         )
+
+        self.logger.info(f"STLOGGING: TASK ENGINE: Emitted event {self._last_event}")
+
         self._telemetry.update_state(new_state)
         return new_state
 
@@ -1176,6 +1204,13 @@ class AsyncTaskRunEngine(BaseTaskRunEngine[P, R]):
         if not self.task_run:
             raise ValueError("Task run is not set")
 
+        # Log the task state transition attempt
+        self.logger.debug(
+            f"STLOGGING: Task run {self.task_run.id} attempting state transition: "
+            f"{last_state.type if last_state else 'None'} -> {state.type} "
+            f"(force={force}, task_name='{self.task.name}')"
+        )
+
         self.task_run.state = new_state = state
 
         if last_state.timestamp == new_state.timestamp:
@@ -1191,6 +1226,13 @@ class AsyncTaskRunEngine(BaseTaskRunEngine[P, R]):
         self.task_run.state_id = new_state.id
         self.task_run.state_type = new_state.type
         self.task_run.state_name = new_state.name
+
+        # Log the task state transition result
+        self.logger.debug(
+            f"STLOGGING: Task run {self.task_run.id} state transition result: "
+            f"{last_state.type if last_state else 'None'} -> {new_state.type} "
+            f"(state_name='{new_state.name}', message='{new_state.message or 'None'}', task_name='{self.task.name}')"
+        )
 
         if last_state.is_running():
             self.task_run.total_run_time += new_state.timestamp - last_state.timestamp
@@ -1214,6 +1256,12 @@ class AsyncTaskRunEngine(BaseTaskRunEngine[P, R]):
             link_state_to_task_run_result(new_state, result)
 
         # emit a state change event
+        self.logger.debug(
+            f"STLOGGING: ASYNC TASK ENGINE: Emitting state change event for task run {self.task_run.id}, "
+            f"task_name='{self.task.name}', state transition: "
+            f"{last_state.type if last_state else 'None'} -> {self.task_run.state.type}, "
+            f"final_state_name='{self.task_run.state.name}'"
+        )
         self._last_event = emit_task_run_state_change_event(
             task_run=self.task_run,
             initial_state=last_state,

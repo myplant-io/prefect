@@ -102,6 +102,15 @@ COPY --from=ui-v2-builder /opt/ui-v2/dist ./src/prefect/server/ui-v2
 RUN rm -rf dist && uv build --sdist --out-dir dist
 RUN mv "dist/prefect-"*".tar.gz" "dist/prefect.tar.gz"
 
+# redis
+RUN uv build --sdist --out-dir dist --directory src/integrations/prefect-redis
+RUN ls dist
+RUN ls src/integrations/prefect-redis
+RUN ls src/integrations/prefect-redis/dist
+RUN mv "src/integrations/prefect-redis/dist/prefect_redis-0.2.8.tar.gz" "dist/prefect_redis.tar.gz"
+# kubernetes
+RUN uv build --sdist --out-dir dist --directory src/integrations/prefect-kubernetes
+RUN mv "src/integrations/prefect-kubernetes/dist/prefect_kubernetes-0.8.0.tar.gz" "dist/prefect_kubernetes.tar.gz"
 
 # Setup a base final image from miniconda
 FROM continuumio/miniconda3:26.1.1 AS prefect-conda
@@ -189,6 +198,8 @@ COPY --from=python-builder /opt/prefect/dist ./dist
 ARG PREFECT_EXTRAS=[redis,client,otel]
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install "./dist/prefect.tar.gz${PREFECT_EXTRAS:-""}" && \
+    uv pip install "./dist/prefect_redis.tar.gz" && \
+    uv pip install "./dist/prefect_kubernetes.tar.gz" && \
     rm -rf dist/
 
 # Remove setuptools

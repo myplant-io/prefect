@@ -1280,6 +1280,8 @@ async def mark_deployments_ready(
     deployment_ids: Optional[Iterable[UUID]] = None,
     work_queue_ids: Optional[Iterable[UUID]] = None,
     retry: Retry = Retry(attempts=5, delay=datetime.timedelta(seconds=0.5)),
+    # don't retry
+    # retry: Retry = Retry(attempts=1),
 ) -> None:
     deployment_ids = deployment_ids or []
     work_queue_ids = work_queue_ids or []

@@ -78,6 +78,8 @@ async def _insert_task_run_states(
 
     logger.debug(f"Recorded {len(task_runs)} task run state change(s)")
 
+    logger.debug(f"STLOGGING: Task run state inserted, {task_runs}, id {[x.id for x in task_runs]}")
+
 
 def task_run_from_event(event: ReceivedEvent) -> TaskRun:
     task_run_id = event.resource.prefect_object_id("prefect.task-run")
@@ -152,6 +154,9 @@ async def record_task_run_event(event: ReceivedEvent, depth: int = 0) -> None:
 
                 now = prefect.types._datetime.now("UTC")
 
+                logger.debug(
+                    f"STLOGGING: Recording task run event {event}, event id {event.id}, resource {event.resource.get('prefect.resource.id')} at depth {depth}")
+
                 await session.execute(
                     db.queries.insert(db.TaskRun)
                     .values(**task_run_dict | {"created": now})
@@ -162,9 +167,33 @@ async def record_task_run_event(event: ReceivedEvent, depth: int = 0) -> None:
                     )
                 )
 
+                logger.debug(
+                    f"STLOGGING: saved task run event {event}, event id {event.id}, resource {event.resource.get('prefect.resource.id')}")
+
                 await _insert_task_run_states(session, [task_run])
 
                 await session.commit()
+                logger.debug(
+                    f"STLOGGING: session committed for event {event} event id {event.id} resource id {event.resource.get('prefect.resource.id')}")
+
+                logger.debug(
+                    "STLOGGING: Recorded task run state change, flow run id %s, task run id %s, event id %s, event %s",
+                    task_run.flow_run_id,
+                    task_run.id,
+                    event.id,
+                    event.event,
+                    extra={
+                        "task_run_id": task_run.id,
+                        "flow_run_id": task_run.flow_run_id,
+                        "event_id": event.id,
+                        "event_follows": event.follows,
+                        "event": event.event,
+                        "occurred": event.occurred,
+                        "current_state_type": task_run.state_type,
+                        "current_state_name": task_run.state_name,
+                    },
+                )
+
                 return
         except IntegrityError:
             if attempt < max_attempts:
@@ -383,12 +412,14 @@ async def consumer(
         if not event.resource.get("prefect.orchestration") == "client":
             return
 
+        # this i get maybe always
         logger.debug(
-            "Received event: %s with id: %s for resource: %s",
+            "STLOGGING: Received event in task run recorder: %s with id: %s for resource: %s",
             event.event,
             event.id,
             event.resource.get("prefect.resource.id"),
         )
+        logger.debug(f'STLOGGING: This I should see for each task, event id {event.id}, resource {event.resource.get("prefect.resource.id")}')
 
         await queue.put(RetryableEvent(event=event))
 

@@ -152,9 +152,18 @@ class Cache(_Cache):
                 messages_with_attribute.append(m)
             results: list[Optional[bool]] = await p.execute()
 
-        return [
-            m for i, m in enumerate(messages_with_attribute) if results[i]
-        ] + messages_without_attribute
+        unique = []
+        for i, m in enumerate(messages_with_attribute):
+            if results[i]:
+                unique.append(m)
+            else:
+                logger.warning(
+                    "Duplicate event detected, skipping: %s",
+                    m.data,
+                    extra={"event_message": m},
+                )
+
+        return unique + messages_without_attribute
 
     async def forget_duplicates(self, attribute: str, messages: list[M]) -> None:
         async with self._client.pipeline() as p:
@@ -289,6 +298,12 @@ class Publisher(_Publisher):
                         "data": message.data,
                         "attributes": orjson.dumps(message.attributes),
                     },
+                )
+                logger.debug(
+                    "Event published to Redis stream %s: %s, %s",
+                    self.stream,
+                    message.attributes,
+                    message.data
                 )
         except Exception:
             if self.deduplicate_by:

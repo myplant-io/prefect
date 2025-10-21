@@ -853,7 +853,8 @@ class KubernetesWorker(
         """
         logger = self.get_flow_run_logger(flow_run)
         async with self._get_configured_kubernetes_client(configuration) as client:
-            logger.info("Creating Kubernetes job...")
+            logger.info(f"Creating Kubernetes job for flow run {flow_run}")
+            self._logger.info(f"Creating Kubernetes job for flow run {flow_run}")
 
             await self._create_job(configuration, client)
 
@@ -879,10 +880,10 @@ class KubernetesWorker(
         """
         logger = self.get_flow_run_logger(flow_run)
         async with self._get_configured_kubernetes_client(configuration) as client:
-            logger.info("Creating Kubernetes job...")
+            logger.info(f"Creating Kubernetes job for flow run {flow_run}")
+            self._logger.info(f"Creating Kubernetes job for flow run {flow_run}")
 
             job = await self._create_job(configuration, client)
-
             assert job, "Job should be created"
             logger.info(
                 "Kubernetes job '%s' created in namespace '%s'",
@@ -890,6 +891,8 @@ class KubernetesWorker(
                 job.metadata.namespace,
             )
             pid = f"{job.metadata.namespace}:{job.metadata.name}"
+            logger.info(f"Created Kubernetes job {pid}")
+            self._logger.info(f"Created Kubernetes job {pid}")
             # Indicate that the job has started
             if task_status is not None:
                 task_status.started(pid)

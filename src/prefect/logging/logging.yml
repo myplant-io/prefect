@@ -1,43 +1,80 @@
 # Prefect logging config file.
 #
-# Any item in this file can be overridden with an environment variable:
+# WHAT THIS FILE DOES: This YAML file configures how Prefect logs messages throughout
+# the entire system - from flows and tasks to the server and workers. It defines
+# formatters (how logs look), handlers (where logs go), and loggers (what components
+# produce logs and at what level).
+#
+# ENVIRONMENT VARIABLE OVERRIDES: Any item in this file can be overridden with an environment variable:
 #    `PREFECT_LOGGING_[PATH]_[TO]_[KEY]=VALUE`
+#    Example: PREFECT_LOGGING_LOGGERS_PREFECT_LEVEL=DEBUG overrides the prefect logger level
 # List items can be overridden with a comma-separated list:
 #   `PREFECT_LOGGING_[PATH]_[TO]_[KEY]=item1,item2,item3`
-# Templated values can be used to insert values from the Prefect settings at runtime.
+# TEMPLATED VALUES: Variables like ${PREFECT_LOGGING_LEVEL} get replaced with actual
+# settings values at runtime, allowing dynamic configuration.
 
-version: 1
-disable_existing_loggers: False
+version: 1  # Python logging config format version (always 1)
+disable_existing_loggers: False  # Don't disable loggers from other libraries
 
+# FORMATTERS: Define how log messages are formatted/displayed
+# Each formatter specifies the structure and appearance of log output
 formatters:
   simple:
+    # SIMPLE FORMATTER: Minimal output showing just timestamp and message
+    # Used for basic logging where detail isn't needed
+    # Output: "14:30:25.123 | Starting flow execution"
     format: "%(asctime)s.%(msecs)03d | %(message)s"
     datefmt: "%H:%M:%S"
 
   standard:
+    # STANDARD FORMATTER: Main Prefect formatter with intelligent context switching
+    # Uses PrefectFormatter class which automatically switches between formats
+    # based on whether we're in a flow run or task run context
     (): prefect.logging.formatters.PrefectFormatter
     format: "%(asctime)s.%(msecs)03d | %(levelname)-7s | %(name)s - %(message)s"
+    # FLOW CONTEXT: When logging from within a flow, shows flow name
+    # Output: "14:30:25.123 | INFO    | Flow run 'my-flow' - Flow completed successfully"
     flow_run_fmt: "%(asctime)s.%(msecs)03d | %(levelname)-7s | Flow run %(flow_run_name)r - %(message)s"
+    # TASK CONTEXT: When logging from within a task, shows task name
+    # Output: "14:30:25.123 | INFO    | Task run 'my-task' - Task completed successfully"
     task_run_fmt: "%(asctime)s.%(msecs)03d | %(levelname)-7s | Task run %(task_run_name)r - %(message)s"
     datefmt: "%H:%M:%S"
 
   debug:
+    # DEBUG FORMATTER: Verbose output including thread information
+    # Used for deep debugging to understand concurrent execution
+    # Output: "14:30:25.123 | DEBUG   | MainThread   | prefect.flow_engine - Processing state change"
     format: "%(asctime)s.%(msecs)03d | %(levelname)-7s | %(threadName)-12s | %(name)s - %(message)s"
     datefmt: "%H:%M:%S"
 
   json:
+    # JSON FORMATTER: Structured logging output for machine parsing
+    # Used by external log aggregation systems (Splunk, DataDog, etc.)
+    # Output: {"timestamp": "2024-01-01T14:30:25", "level": "INFO", "message": "Flow started", "flow_id": "123"}
     class: prefect.logging.formatters.JsonFormatter
     format: "default"
 
+# FILTERS: (Currently unused but available for customization)
+# Filters can drop or modify log records before they reach handlers
+# Example use cases: removing sensitive data, rate limiting, conditional logging
 # filters:
 # Define any custom filters to drops records containing
 # sensitive information
 # my_filter:
 # (): your_module.FilterClass
 
+# HANDLERS: Define where log messages are sent and how they're processed
+# Each handler represents a destination for log messages (console, file, API, etc.)
 handlers:
   # The handlers we define here will output all logs they receive by default
   # but we include the `level` so it can be overridden by environment
+
+  console_json:
+    # CONSOLE JSON HANDLER: Outputs logs to terminal/stdout in JSON format
+    # Useful for environments that consume structured logs directly from stdout
+    level: 0  # Accept all log levels (0 = NOTSET, meaning inherit from logger)
+    class: prefect.logging.handlers.PrefectConsoleHandler  # Custom handler with Rich terminal formatting
+    formatter: standard  # Use the JSON formatter for structured output
 
   console:
     level: 0
@@ -45,85 +82,140 @@ handlers:
     formatter: standard
     stream: ext://sys.stderr
     styles:
-      log.web_url: bright_blue
-      log.local_url: bright_blue
+      # URL COLORS: Make URLs stand out in logs
+      log.web_url: bright_blue      # Prefect Cloud/Server URLs
+      log.local_url: bright_blue    # Local development URLs
 
-      log.info_level: cyan
-      log.warning_level: yellow3
-      log.error_level: red3
-      log.critical_level: bright_red
+      # LOG LEVEL COLORS: Different colors for different severity levels
+      log.info_level: cyan          # INFO messages in cyan
+      log.warning_level: yellow3    # WARNING messages in yellow
+      log.error_level: red3         # ERROR messages in red
+      log.critical_level: bright_red # CRITICAL messages in bright red
 
-      log.completed_state: green
-      log.cancelled_state: yellow3
-      log.failed_state: red3
-      log.crashed_state: bright_red
-      log.cached_state: bright_blue
+      # STATE COLORS: Visual indicators for flow/task states
+      log.completed_state: green       # Successful completion in green
+      log.cancelled_state: yellow3     # Cancelled runs in yellow
+      log.failed_state: red3          # Failed runs in red
+      log.crashed_state: bright_red   # Crashed runs in bright red
+      log.cached_state: bright_blue   # Cached results in blue
 
-      log.flow_run_name: magenta
-      log.flow_name: bold magenta
+      # FLOW/TASK COLORS: Highlight flow and task names
+      log.flow_run_name: magenta      # Flow run names in magenta
+      log.flow_name: bold magenta     # Flow names in bold magenta
 
   api:
+    # API HANDLER: Sends logs to Prefect Cloud/Server for centralized logging
+    # These logs appear in the Prefect UI under flow run and task run details
+    # Essential for production debugging and monitoring
     level: 0
     class: prefect.logging.handlers.APILogHandler
 
   debug:
+    # DEBUG HANDLER: Raw output to stderr for local debugging
+    # Uses verbose debug formatter with thread information
+    # Useful when developing or troubleshooting Prefect itself
     level: 0
     class: prefect.logging.handlers._SafeStreamHandler
     formatter: debug
-    stream: ext://sys.stderr
 
   worker_api:
+    # WORKER API HANDLER: Specialized handler for worker-generated logs
+    # Sends worker-specific logs to the server, including infrastructure
+    # and deployment logs from remote execution environments
     level: 0
     class: prefect.logging.handlers.WorkerAPILogHandler
 
+# LOGGERS: Define which components produce logs and how they're handled
+# Each logger corresponds to a module or component in Prefect
 loggers:
   prefect:
-    level: "${PREFECT_LOGGING_LEVEL}"
+    # ROOT PREFECT LOGGER: Main logger for all Prefect components
+    # Controls general logging level for flows, tasks, and core functionality
+    # Setting this to DEBUG shows detailed execution information
+    level: "${PREFECT_LOGGING_LEVEL}"  # Controlled by PREFECT_LOGGING_LEVEL env var
+    handlers: [console_json]
 
   prefect.extra:
+    # EXTRA LOGGER: For additional context and structured logging
+    # Used by custom logging implementations and extended functionality
+    # Only sends to API (Prefect UI), doesn't show in console unless propagated
     level: "${PREFECT_LOGGING_LEVEL}"
-    handlers: [api]
-    propagate: false
+    handlers: [api, console_json]        # Only send to Prefect Cloud/Server
+    propagate: false       # Don't pass logs up to parent loggers (prevents console output)
 
   prefect.flow_runs:
-    level: NOTSET
-    handlers: [api]
+    # FLOW RUN LOGGER: Captures flow execution lifecycle events
+    # Logs flow state changes, timing, and execution metadata
+    # Critical for monitoring flow health in production
+    level: NOTSET          # Inherit from parent (prefect logger)
+    handlers: [api, console_json]        # Send to Prefect UI for visibility
+
 
   prefect.task_runs:
-    level: NOTSET
-    handlers: [api]
+    # TASK RUN LOGGER: Captures individual task execution events
+    # Logs task state changes, results, and performance metrics
+    # Essential for debugging task-level issues
+    level: NOTSET          # Inherit from parent (prefect logger)
+    handlers: [api, console_json]        # Send to Prefect UI for visibility
 
   prefect.workers:
-    level: NOTSET
-    handlers: [worker_api]
+    # WORKER LOGGER: For Prefect workers running on remote infrastructure
+    # Captures deployment, infrastructure setup, and job execution logs
+    # Helps debug issues with remote execution environments
+    level: NOTSET          # Inherit from parent (prefect logger)
+    handlers: [worker_api, console_json] # Use specialized worker API handler
 
   prefect.server:
-    level: "${PREFECT_SERVER_LOGGING_LEVEL}"
+    # SERVER LOGGER: For Prefect server/orchestration engine logs
+    # Includes API requests, database operations, and orchestration logic
+    # Useful for debugging server-side issues and performance
+    level: "${PREFECT_SERVER_LOGGING_LEVEL}"  # Separate control from client logging
 
   prefect.client:
+    # CLIENT LOGGER: For Prefect client SDK operations
+    # Logs API calls, authentication, and client-server communication
+    # Helps debug connectivity and API issues
     level: "${PREFECT_LOGGING_LEVEL}"
 
   prefect.infrastructure:
+    # INFRASTRUCTURE LOGGER: For infrastructure provisioning and management
+    # Covers Docker, Kubernetes, cloud resources, and deployment platforms
+    # Critical for debugging deployment and scaling issues
     level: "${PREFECT_LOGGING_LEVEL}"
 
   prefect._internal:
-    level: "${PREFECT_INTERNAL_LOGGING_LEVEL}"
-    propagate: false
-    handlers: [debug]
+    # INTERNAL LOGGER: For Prefect's internal debugging and development
+    # Low-level system operations, performance monitoring, internals
+    # Usually only enabled for Prefect development or deep troubleshooting
+    level: "${PREFECT_INTERNAL_LOGGING_LEVEL}"  # Usually set to WARNING or higher
+    propagate: false       # Keep internal logs separate
+    handlers: [debug, console_json]      # Send to debug handler (stderr with thread info)
 
   uvicorn:
+    # UVICORN LOGGER: For the ASGI web server that runs Prefect server
+    # Logs HTTP requests, server startup/shutdown, and web server events
+    # Useful for debugging API connectivity and server performance issues
     level: "${PREFECT_SERVER_LOGGING_LEVEL}"
-    handlers: [console]
-    propagate: false
+    handlers: [console]    # Show in console for immediate visibility
+    propagate: false       # Don't duplicate in root logger
 
   fastapi:
+    # FASTAPI LOGGER: For the FastAPI web framework powering Prefect's REST API
+    # Logs API route handling, request validation, and web framework events
+    # Helps debug API endpoint issues and request/response problems
     level: "${PREFECT_SERVER_LOGGING_LEVEL}"
-    handlers: [console]
-    propagate: false
+    handlers: [console]    # Show in console for immediate visibility
+    propagate: false       # Don't duplicate in root logger
 
-# The root logger: any logger without propagation disabled sends to here as well
+  kopf:
+    level: "${PREFECT_LOGGING_LEVEL}"
+    handlers: [console_json]    # Show in console for immediate visibility
+
+# ROOT LOGGER: The fallback logger for any component not explicitly configured above
+# Any logger without propagation disabled will also send logs here
 root:
-  # By default, we display warning level logs from any library in the console
-  # to match Python's default behavior while formatting logs nicely
-  level: WARNING
-  handlers: [console]
+  # PHILOSOPHY: Show warnings and errors from any library (not just Prefect)
+  # This catches important issues from dependencies (databases, HTTP libraries, etc.)
+  # while avoiding spam from verbose third-party debug logs
+  level: WARNING           # Only show WARNING and above from non-Prefect libraries
+  handlers: [console]      # Display in console with nice formatting

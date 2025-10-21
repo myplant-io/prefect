@@ -856,7 +856,9 @@ class RunDeployment(JinjaTemplateAction, DeploymentCommandAction):
             )
 
             logger.info(
-                "Started flow run",
+                "Started flow run, id=%s, name=%s",
+                str(flow_run.id),
+                flow_run.name,
                 extra={
                     "flow_run": {
                         "id": str(flow_run.id),
@@ -1124,7 +1126,8 @@ class FlowRunStateChangeAction(FlowRunAction):
         )
 
         logger.info(
-            "Changing flow run state",
+            "Changing flow run state, flow run id: %s",
+            str(flow_run_id),
             extra={
                 "flow_run_id": str(flow_run_id),
                 **self.logging_context(triggered_action),

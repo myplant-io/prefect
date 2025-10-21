@@ -153,8 +153,12 @@ class APILogHandler(logging.Handler):
         """
 
         result = APILogWorker.drain_all()
+        print("Sending logs to API...")
+        start = time.time()
         if inspect.isawaitable(result):
             await result
+            end = time.time()
+            print(f"Finished sending logs to API in {end - start:.2f} seconds.")
 
     def emit(self, record: logging.LogRecord) -> None:
         """

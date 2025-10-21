@@ -61,10 +61,11 @@ class EventPublisher(Publisher):
             return
 
         logger.debug(
-            "Publishing event: %s with id: %s for resource: %s",
+            "Publishing event: %s with id: %s for resource: %s, event=%s",
             event.event,
             event.id,
             event.resource.get("prefect.resource.id"),
+            event,
         )
         await self.publish_data(
             encoded,
