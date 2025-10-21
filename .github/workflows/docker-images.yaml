@@ -2,6 +2,9 @@ name: Docker images
 
 on:
   # On release events (also when a published release is converted from/to prerelease), push all patterns
+  # push:
+    # branches: [release/v3.4.24-innio]
+
   release:
     types: [released, prereleased]
 
@@ -23,18 +26,20 @@ jobs:
     name: Build and publish to DockerHub
     runs-on: ubuntu-latest
     environment: ${{ github.event_name == 'release' && github.event.release.prerelease && 'pre-release' || github.event_name == 'release' && 'prod' || 'dev' }}
+
     strategy:
       fail-fast: false
       matrix:
         image:
-          - "prefecthq/prefect"
-          - "prefecthq/prefect-client"
+          - "inniodata.azurecr.io/prefect"
+          #- "prefecthq/prefect"
+          # - "prefecthq/prefect-client"
         python-version:
-          - "3.10"
-          - "3.11"
+          # - "3.9"
+          # - "3.10"
+          # - "3.11"
           - "3.12"
-          - "3.13"
-          - "3.14"
+          # - "3.13"
         flavor:
         - ""
         - "-conda"
@@ -60,11 +65,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+#      - name: Login to DockerHub
+#        uses: docker/login-action@v3
+#        with:
+#          driver-opts: image=moby/buildkit:v0.12.5
+
+      # - name: Login to DockerHub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
+      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to Azure Container Registry
+        run: echo "${{ secrets.ACR_PASSWORD_2 }}" | docker login "inniodata.azurecr.io" -u "${{ secrets.ACR_USERNAME_2 }}" --password-stdin
 
       - name: Checkout
         uses: actions/checkout@v6
@@ -124,7 +137,7 @@ jobs:
         with:
           context: .
           file: ${{ (matrix.image == 'prefecthq/prefect-client') && 'client/Dockerfile' || 'Dockerfile' }}
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           build-args: |
             PYTHON_VERSION=${{ matrix.python-version }}
             NODE_VERSION=${{ steps.get_node_version.outputs.NODE_VERSION }}
@@ -135,35 +148,50 @@ jobs:
           push: true
           pull: true
           provenance: false
-          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.python-version }}${{ matrix.flavor }},ignore-error=true
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.python-version }}${{ matrix.flavor }},ignore-error=true
 
-  get-prefect-aws-version:
-    name: Get latest prefect-aws version
-    needs: publish-docker-images
-    runs-on: ubuntu-latest
-    # Only trigger on actual releases (not workflow_dispatch)
-    if: github.event_name == 'release'
-    outputs:
-      PREFECT_AWS_VERSION: ${{ steps.get_version.outputs.PREFECT_AWS_VERSION }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+  # get-prefect-aws-version:
+  #   name: Get latest prefect-aws version
+  #   needs: publish-docker-images
+  #   runs-on: ubuntu-latest
+  #   # Only trigger on actual releases (not workflow_dispatch)
+  #   if: github.event_name == 'release'
+  #   outputs:
+  #     PREFECT_AWS_VERSION: ${{ steps.get_version.outputs.PREFECT_AWS_VERSION }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v5
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Get latest prefect-aws version from tags
-        id: get_version
-        run: |
-          PREFECT_AWS_VERSION=$(git tag --list 'prefect-aws-*' --sort=-version:refname | head -1 | sed 's/^prefect-aws-//')
-          echo "PREFECT_AWS_VERSION=$PREFECT_AWS_VERSION" >> $GITHUB_OUTPUT
+  #     - name: Get latest prefect-aws version from tags
+  #       id: get_version
+  #       run: |
+  #         PREFECT_AWS_VERSION=$(git tag --list 'prefect-aws-*' --sort=-version:refname | head -1 | sed 's/^prefect-aws-//')
+  #         echo "PREFECT_AWS_VERSION=$PREFECT_AWS_VERSION" >> $GITHUB_OUTPUT
 
-  trigger-prefect-aws-build:
-    name: Build prefect-aws Docker images
-    needs: [publish-docker-images, get-prefect-aws-version]
-    if: github.event_name == 'release' && needs.get-prefect-aws-version.outputs.PREFECT_AWS_VERSION != ''
-    uses: ./.github/workflows/prefect-aws-docker-images.yaml
-    with:
-      prefect_version: ${{ github.ref_name }}
-      prefect_aws_version: ${{ needs.get-prefect-aws-version.outputs.PREFECT_AWS_VERSION }}
-    secrets: inherit
+  # trigger-prefect-aws-build:
+  #   name: Build prefect-aws Docker images
+  #   needs: [publish-docker-images, get-prefect-aws-version]
+  #   if: github.event_name == 'release' && needs.get-prefect-aws-version.outputs.PREFECT_AWS_VERSION != ''
+  #   uses: ./.github/workflows/prefect-aws-docker-images.yaml
+  #   with:
+  #     prefect_version: ${{ github.ref_name }}
+  #     prefect_aws_version: ${{ needs.get-prefect-aws-version.outputs.PREFECT_AWS_VERSION }}
+  #   secrets: inherit
+
+  # trigger-oss-testbed-update:
+  #   name: Trigger OSS testbed image update
+  #   needs: publish-docker-images
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Trigger cluster-deployment workflow
+  #       run: |
+  #         # Construct the Kubernetes image tag (e.g., 3.4.16-python3.11-kubernetes)
+  #         IMAGE_TAG="${{ github.ref_name }}-python3.11-kubernetes"
+
+  #         gh workflow run update-prefect-image-version.yaml \
+  #           --repo PrefectHQ/cluster-deployment \
+  #           --ref main \
+  #           --field image_tag="$IMAGE_TAG"
+  #       env:
+  #         GH_TOKEN: ${{ secrets.CLUSTER_DEPLOYMENT_ACTIONS_RW }}

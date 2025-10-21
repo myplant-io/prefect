@@ -229,15 +229,15 @@ class Publisher(_Publisher):
         self._client = get_async_redis_client()
         self._batch: list[RedisStreamsMessage] = []
 
-        if self.publish_every is not None:
-            interval = self.publish_every.total_seconds()
-
-            async def _publish_periodically() -> None:
-                while True:
-                    await asyncio.sleep(interval)
-                    await asyncio.shield(self._publish_current_batch())
-
-            self._periodic_task = asyncio.create_task(_publish_periodically())
+        # if self.publish_every is not None:
+        #     interval = self.publish_every.total_seconds()
+        #
+        #     async def _publish_periodically() -> None:
+        #         while True:
+        #             await asyncio.sleep(interval)
+        #             await asyncio.shield(self._publish_current_batch())
+        #
+        #     self._periodic_task = asyncio.create_task(_publish_periodically())
 
         return self
 

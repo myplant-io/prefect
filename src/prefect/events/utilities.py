@@ -97,9 +97,15 @@ def emit_event(
 
         event_obj = Event(**event_kwargs)
 
-        max_size = get_current_settings().server.events.maximum_size_bytes
-        if event_obj.size_bytes > max_size:
-            raise EventTooLarge(event_obj.size_bytes, max_size)
+        # Log detailed event emission information
+        logger.debug(
+            f"STLOGGING: CLIENT: Emitting event: type='{event}', "
+            f"id={event_obj.id}, resource_id='{resource.get('prefect.resource.id', 'unknown')}', "
+            f"occurred={occurred.isoformat() if occurred else 'None'}, "
+            f"follows={event_kwargs.get('follows', 'None')}, "
+            f"payload_keys={list(payload.keys()) if payload else 'None'}, "
+            f"related_count={len(related) if related else 0}"
+        )
 
         worker_instance.send(event_obj)
 

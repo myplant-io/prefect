@@ -54,7 +54,7 @@ def configure(settings: kopf.OperatorSettings, **_):
 
 @kopf.on.startup()
 async def initialize_clients(logger: kopf.Logger, **kwargs: Any):
-    logger.info("Initializing clients")
+    logger.info("Initializing clients with my changes")
     global events_client
     global orchestration_client
     global _startup_event_semaphore
@@ -95,7 +95,10 @@ async def _replicate_pod_event(  # pyright: ignore[reportUnusedFunction]
     event_type = event["type"]
     phase = status["phase"]
 
-    logger.debug(f"Pod event received - type: {event_type}, phase: {phase}, uid: {uid}")
+    logger.info(f"Pod event received - type: {event_type}, phase: {phase}, uid: {uid}")
+    if event_type is None:
+        logger.info("Skipping pod event, probably an old one")
+        return
 
     # Extract the creation timestamp from the Kubernetes event
     k8s_created_time = None
@@ -246,7 +249,7 @@ async def _get_k8s_jobs(
 
 
 @kopf.on.event(
-    "jobs",
+    "jobs.v1.batch",
     labels={
         "prefect.io/flow-run-id": kopf.PRESENT,
         **settings.observer.additional_label_filters,
@@ -268,9 +271,20 @@ async def _mark_flow_run_as_crashed(  # pyright: ignore[reportUnusedFunction]
     if not (flow_run_id := labels.get("prefect.io/flow-run-id")):
         return
 
-    logger.debug(
+    logger.info(
         f"Job event received - name: {name}, flow_run_id: {flow_run_id}, status: {status}"
     )
+    event_type = event["type"]
+    if event_type is None:
+        logger.info("Skipping job event, probably an old one")
+        return
+
+    # lastTransitionTime = status.get("conditions", [])[-1].get("lastTransitionTime")
+    # # skip if older than 1h
+    # if lastTransitionTime and (datetime.now(timezone.utc) - lastTransitionTime) > timedelta(hours=1):
+    #     logger.info(f"Skipping job event, older than 1h: {lastTransitionTime}")
+    #     return
+
     backoff_limit = spec.get("backoffLimit", 6)
 
     # Check current job status from the event
@@ -278,7 +292,7 @@ async def _mark_flow_run_as_crashed(  # pyright: ignore[reportUnusedFunction]
 
     # If the job is still active or has succeeded, don't mark as crashed
     if not current_job_failed:
-        logger.debug(f"Job {name} is still active or has succeeded, skipping")
+        logger.info(f"Job {name} is still active or has succeeded, skipping")
         return
 
     # Get the flow run to check its state
@@ -289,14 +303,14 @@ async def _mark_flow_run_as_crashed(  # pyright: ignore[reportUnusedFunction]
             flow_run_id=uuid.UUID(flow_run_id)
         )
     except ObjectNotFound:
-        logger.debug(f"Flow run {flow_run_id} not found, skipping")
+        logger.info(f"Flow run {flow_run_id} not found, skipping")
         return
 
     assert flow_run.state is not None, "Expected flow run state to be set"
 
     # Exit early for terminal/final/scheduled states
     if flow_run.state.is_final() or flow_run.state.is_scheduled():
-        logger.debug(f"Flow run {flow_run_id} is in final or scheduled state, skipping")
+        logger.info(f"Flow run {flow_run_id} is in final or scheduled state, skipping")
         return
 
     # In the case where a flow run is rescheduled due to a SIGTERM, it will show up as another active job if the
@@ -322,7 +336,7 @@ async def _mark_flow_run_as_crashed(  # pyright: ignore[reportUnusedFunction]
                 or (job.status and job.status.active and job.status.active > 0)  # type: ignore
                 for job in other_jobs
             )
-            logger.debug(
+            logger.info(
                 f"Other jobs status - count: {len(other_jobs)}, has_active: {has_other_active_job}"
             )
 
@@ -420,26 +434,28 @@ def _observer_thread_entry():
 
     namespaces = settings.observer.namespaces
 
-    if namespaces:
-        asyncio.run(
-            kopf.operator(
-                namespaces=namespaces,
-                stop_flag=_stop_flag,
-                ready_flag=_ready_flag,
-                standalone=True,
-                identity=uuid.uuid4().hex,
-            )
+    # if namespaces:
+    #     asyncio.run(
+    #         kopf.operator(
+    #             namespaces=namespaces,
+    #             stop_flag=_stop_flag,
+    #             ready_flag=_ready_flag,
+    #             standalone=True,
+    #             identity=uuid.uuid4().hex,
+    #         )
+    #     )
+    # else:
+
+    # TODO
+    asyncio.run(
+        kopf.operator(
+            clusterwide=True,
+            stop_flag=_stop_flag,
+            ready_flag=_ready_flag,
+            standalone=True,
+            identity=uuid.uuid4().hex,
         )
-    else:
-        asyncio.run(
-            kopf.operator(
-                clusterwide=True,
-                stop_flag=_stop_flag,
-                ready_flag=_ready_flag,
-                standalone=True,
-                identity=uuid.uuid4().hex,
-            )
-        )
+    )
 
 
 def start_observer():

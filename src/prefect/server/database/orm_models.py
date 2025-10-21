@@ -130,7 +130,7 @@ class Base(DeclarativeBase):
         index=True,
         server_default=sa.func.now(),
         default=lambda: now("UTC"),
-        onupdate=sa.func.now(),
+        onupdate=sa.func.now(), # TODO make sure this works as expected
         server_onupdate=FetchedValue(),
     )
 

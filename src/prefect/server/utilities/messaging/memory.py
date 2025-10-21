@@ -124,14 +124,16 @@ class Subscription:
             self._queue.put_nowait(message)
             await update_metric(self.topic.name, "published")
             logger.debug(
-                "Delivered message to topic=%r queue_size=%d retry_queue_size=%d",
+                "Delivered message to topic=%r queue_size=%d retry_queue_size=%d, message=%s",
                 self.topic.name,
                 self._queue.qsize(),
                 self._retry.qsize(),
+                # message bytes to str if bytes
+                message.data.decode() if isinstance(message.data, bytes) else message.data,
             )
         except asyncio.QueueFull:
             logger.warning(
-                "Subscription queue is full, dropping message for topic=%r queue_size=%d retry_queue_size=%d",
+                "CRITICAL: Subscription queue is full, dropping message for topic=%r queue_size=%d retry_queue_size=%d",
                 self.topic.name,
                 self._queue.qsize(),
                 self._retry.qsize(),
@@ -150,7 +152,7 @@ class Subscription:
         message.retry_count += 1
         if message.retry_count > self.max_retries:
             logger.warning(
-                "Message failed after %d retries and will be moved to the dead letter queue",
+                "CRITICAL: Message failed after %d retries and will be moved to the dead letter queue",
                 message.retry_count,
                 extra={"event_message": message},
             )
@@ -190,7 +192,7 @@ class Subscription:
                 to_json(asdict(message))
             )
         except Exception as e:
-            logger.warning("Failed to write message to dead letter queue", exc_info=e)
+            logger.warning("CRITICAL: Failed to write message to dead letter queue", exc_info=e)
 
 
 class Topic:
@@ -271,7 +273,7 @@ class Cache(_Cache):
         for m in messages:
             if not m.attributes or attribute not in m.attributes:
                 logger.warning(
-                    "Message is missing deduplication attribute %r",
+                    "CRITICAL: Message is missing deduplication attribute %r",
                     attribute,
                     extra={"event_message": m},
                 )
@@ -290,7 +292,7 @@ class Cache(_Cache):
         for m in messages:
             if not m.attributes or attribute not in m.attributes:
                 logger.warning(
-                    "Message is missing deduplication attribute %r",
+                    "CRITICAL: Message is missing deduplication attribute %r",
                     attribute,
                     extra={"event_message": m},
                 )
@@ -379,7 +381,7 @@ class Consumer(_Consumer):
                     await self.subscription.retry(message)
                 raise  # Propagate to task group
             except Exception:
-                logger.exception("Failed in consume_loop")
+                logger.exception("CRITICAL: Failed in consume_loop")
                 await self.subscription.retry(message)
 
 
