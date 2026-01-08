@@ -9,6 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache License 2.0" }
 keywords = ["prefect"]
+version = "0.2.8"
 authors = [{ name = "Prefect Technologies, Inc.", email = "help@prefect.io" }]
 classifiers = [
   "Natural Language :: English",
@@ -23,7 +24,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = ["prefect>=3.4.24", "redis>=6.0.0"]
-dynamic = ["version"]
+#dynamic = ["version"]
 
 [dependency-groups]
 dev = [
@@ -53,7 +54,7 @@ prefect_redis = "prefect_redis"
 version_file = "prefect_redis/_version.py"
 root = "../../.."
 tag_regex = "^prefect-redis-(?P<version>\\d+\\.\\d+\\.\\d+(?:[a-zA-Z0-9]+(?:\\.[a-zA-Z0-9]+)*)?)$"
-fallback_version = "0.2.0"
+fallback_version = "0.2.8"
 git_describe_command = 'git describe --dirty --tags --long --match "prefect-redis-*[0-9]*"'
 
 [tool.interrogate]

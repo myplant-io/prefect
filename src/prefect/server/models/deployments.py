@@ -1098,7 +1098,8 @@ async def mark_deployments_ready(
     db: PrefectDBInterface = Depends(provide_database_interface),
     deployment_ids: Optional[Iterable[UUID]] = None,
     work_queue_ids: Optional[Iterable[UUID]] = None,
-    retry: Retry = Retry(attempts=5, delay=datetime.timedelta(seconds=0.5)),
+    # don't retry
+    retry: Retry = Retry(attempts=1),
 ) -> None:
     deployment_ids = deployment_ids or []
     work_queue_ids = work_queue_ids or []
@@ -1109,43 +1110,51 @@ async def mark_deployments_ready(
     async with db.session_context(
         begin_transaction=True,
     ) as session:
-        result = await session.execute(
-            select(db.Deployment.id).where(
-                sa.or_(
-                    db.Deployment.id.in_(deployment_ids),
-                    db.Deployment.work_queue_id.in_(work_queue_ids),
-                ),
-                db.Deployment.status == DeploymentStatus.NOT_READY,
-            )
-        )
-        unready_deployments = list(result.scalars().unique().all())
-
-        last_polled = now("UTC")
-
-        await session.execute(
-            sa.update(db.Deployment)
-            .where(
-                sa.or_(
-                    db.Deployment.id.in_(deployment_ids),
-                    db.Deployment.work_queue_id.in_(work_queue_ids),
+        try:
+            result = await session.execute(
+                select(db.Deployment.id).where(
+                    sa.or_(
+                        db.Deployment.id.in_(deployment_ids),
+                        db.Deployment.work_queue_id.in_(work_queue_ids),
+                    ),
+                    db.Deployment.status == DeploymentStatus.NOT_READY,
                 )
             )
-            .values(status=DeploymentStatus.READY, last_polled=last_polled)
-        )
+            unready_deployments = list(result.scalars().unique().all())
 
-        if not unready_deployments:
-            return
+            last_polled = now("UTC")
 
-        async with PrefectServerEventsClient() as events:
-            for deployment_id in unready_deployments:
-                await events.emit(
-                    await deployment_status_event(
-                        session=session,
-                        deployment_id=deployment_id,
-                        status=DeploymentStatus.READY,
-                        occurred=last_polled,
+            await session.execute(
+                sa.update(db.Deployment)
+                .where(
+                    sa.or_(
+                        db.Deployment.id.in_(deployment_ids),
+                        db.Deployment.work_queue_id.in_(work_queue_ids),
                     )
                 )
+                .values(
+                    status=DeploymentStatus.READY,
+                    last_polled=last_polled,
+                    updated=db.Deployment.updated  # Explicitly set to current value
+                )
+            )
+
+            if not unready_deployments:
+                return
+
+            async with PrefectServerEventsClient() as events:
+                for deployment_id in unready_deployments:
+                    await events.emit(
+                        await deployment_status_event(
+                            session=session,
+                            deployment_id=deployment_id,
+                            status=DeploymentStatus.READY,
+                            occurred=last_polled,
+                        )
+                    )
+        except Exception as exc:
+            logger.error(f"Failed to mark deployments as ready: {exc}", exc_info=exc)
+            return
 
 
 @db_injector
@@ -1183,7 +1192,10 @@ async def mark_deployments_not_ready(
                         db.Deployment.work_queue_id.in_(work_queue_ids),
                     )
                 )
-                .values(status=DeploymentStatus.NOT_READY)
+                .values(
+                    status=DeploymentStatus.NOT_READY,
+                    updated=db.Deployment.updated  # Explicitly set to current value
+                )
             )
 
             if not ready_deployments:

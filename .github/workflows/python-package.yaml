@@ -1,6 +1,8 @@
 name: Publish Python package
 
 on:
+#  push:
+#    branches: [release/v3.4.24-innio]
   release:
     types: [released, prereleased]
   workflow_dispatch:
@@ -89,5 +91,22 @@ jobs:
           name: pypi-dists
           path: "./dist"
 
-      - name: Publish distribution to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Configure uv
+        if: steps.check_uv.outputs.files_exists == 'true'
+        run: |
+          echo UV_INDEX_MYPLANT_NEXUS_USERNAME='myplant-publisher' >> ${GITHUB_ENV}
+          echo UV_INDEX_MYPLANT_NEXUS_PASSWORD='${{ secrets.NEXUS_MYPLANT_PUBLISHER }}' >> ${GITHUB_ENV}
+          echo UV_INDEX_MYPLANT_NEXUS_EXTERNAL_USERNAME='myplant-publisher' >> ${GITHUB_ENV}
+          echo UV_INDEX_MYPLANT_NEXUS_EXTERNAL_PASSWORD='${{ secrets.NEXUS_MYPLANT_PUBLISHER }}' >> ${GITHUB_ENV}
+
+      - name: Publish package to nexus (with uv)
+        if: steps.check_uv.outputs.files_exists == 'true' && needs.setup.outputs.publish-target != 'none' && (needs.setup.outputs.publish-sha == 'true' || startsWith(github.ref, 'refs/tags/'))
+        run: |
+          for targetRegistry in $(echo "$TARGET" | jq -r '.[]'); do
+            uv publish --index $targetRegistry
+          done
+        env:
+          TARGET: ${{ join(needs.setup.outputs.publish-target, ';') }}
+
+      # - name: Publish distribution to PyPI
+      #   uses: pypa/gh-action-pypi-publish@release/v1

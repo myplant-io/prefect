@@ -260,6 +260,7 @@ async def _write_postgres_events(
         session: a Postgres events session
         events: the events to insert
     """
+    logger.debug(f"Writing events to Postgres: {events}")
     for batch in _in_safe_batches(events):
         event_rows = [event.as_database_row() for event in batch]
         result = await session.scalars(
