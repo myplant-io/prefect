@@ -556,7 +556,7 @@ class SyncTaskRunEngine(BaseTaskRunEngine[P, R]):
             raise ValueError("Task run is not set")
 
         # Log the task state transition attempt
-        self.logger.debug(
+        self.logger.info(
             f"STLOGGING: Task run {self.task_run.id} attempting state transition: "
             f"{last_state.type if last_state else 'None'} -> {state.type} "
             f"(force={force}, task_name='{self.task.name}')"
@@ -579,7 +579,7 @@ class SyncTaskRunEngine(BaseTaskRunEngine[P, R]):
         self.task_run.state_name = new_state.name
         
         # Log the task state transition result
-        self.logger.debug(
+        self.logger.info(
             f"STLOGGING: Task run {self.task_run.id} state transition result: "
             f"{last_state.type if last_state else 'None'} -> {new_state.type} "
             f"(state_name='{new_state.name}', message='{new_state.message or 'None'}', task_name='{self.task.name}')"
@@ -607,7 +607,7 @@ class SyncTaskRunEngine(BaseTaskRunEngine[P, R]):
             link_state_to_task_run_result(new_state, result)
 
         # emit a state change event
-        self.logger.debug(
+        self.logger.info(
             f"STLOGGING: TASK ENGINE: Emitting state change event for task run {self.task_run.id}, "
             f"task_name='{self.task.name}', state transition: "
             f"{last_state.type if last_state else 'None'} -> {self.task_run.state.type}, "
@@ -619,6 +619,9 @@ class SyncTaskRunEngine(BaseTaskRunEngine[P, R]):
             validated_state=self.task_run.state,
             follows=self._last_event,
         )
+
+        self.logger.info(f"STLOGGING: TASK ENGINE: Emitted event {self._last_event}")
+
         self._telemetry.update_state(new_state)
         return new_state
 
