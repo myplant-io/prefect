@@ -127,7 +127,7 @@ class TaskRunWaiter:
             async for event in subscriber:
                 try:
                     self.logger.debug(
-                        f"Received event: {event.resource['prefect.resource.id']}"
+                        f"Received event: {event.resource['prefect.resource.id']}, event={event}"
                     )
                     task_run_id = uuid.UUID(
                         event.resource["prefect.resource.id"].replace(
