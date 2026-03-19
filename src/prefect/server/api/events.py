@@ -87,7 +87,8 @@ async def stream_events_in(websocket: WebSocket) -> None:
                     f"STLOGGING: EVENTS WEBSOCKET: Received event via WebSocket: "
                     f"type='{event.event}', id={event.id}, "
                     f"resource_id='{event.resource.get('prefect.resource.id', 'unknown')}', "
-                    f"occurred={event.occurred.isoformat() if event.occurred else 'None'}"
+                    f"occurred={event.occurred.isoformat() if event.occurred else 'None',}"
+                    f"event={event}"
                 )
                 await publisher.publish_event(event.receive())
     except subscriptions.NORMAL_DISCONNECT_EXCEPTIONS:  # pragma: no cover
