@@ -277,7 +277,14 @@ async def schedule_deployments(
             # record the last deployment ID
             last_id = deployment_ids[-1]
 
-    logger.info(f"Scheduled {total_inserted_runs} runs.")
+    if total_inserted_runs > 0:
+        logger.info(
+            f"[SCHEDULER_TICK] schedule_deployments ran, scheduled {total_inserted_runs} runs."
+        )
+    else:
+        logger.warning(
+            "[SCHEDULER_TICK] schedule_deployments ran, scheduled 0 runs."
+        )
 
 
 @perpetual_service(
@@ -350,4 +357,11 @@ async def schedule_recent_deployments(
         else:
             last_id = deployment_ids[-1]
 
-    logger.info(f"Scheduled {total_inserted_runs} runs.")
+    if total_inserted_runs > 0:
+        logger.info(
+            f"[SCHEDULER_TICK] schedule_recent_deployments ran, scheduled {total_inserted_runs} runs."
+        )
+    else:
+        logger.info(
+            "[SCHEDULER_TICK] schedule_recent_deployments ran, scheduled 0 runs."
+        )
