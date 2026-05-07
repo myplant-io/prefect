@@ -57,20 +57,19 @@ task_functions: list[Callable[..., Any]] = [
 
 
 async def _run_worker_with_reconnect(
-    docket: Docket,
+    docket_factory: Callable[[], Docket],
     ephemeral: bool,
     webserver_only: bool,
     shutdown_event: asyncio.Event,
 ) -> None:
     """
-    Supervise a docket Worker, rebuilding it on any unexpected failure.
+    Supervise a docket Worker, rebuilding both the Worker and the Docket on
+    any unexpected failure.
 
-    Docket's own `Worker._run` only reconnects on `redis.exceptions.ConnectionError`;
-    anything else (ResponseError, OSError, asyncio-level errors, a heartbeat task
-    raising, etc.) silently terminates the worker while leaving the parent process
-    running. This supervisor catches any such failure, rebuilds the `Worker` and
-    re-schedules perpetual services, then resumes processing — with exponential
-    backoff between attempts so we do not hot-loop against a dead Redis.
+    Rebuilding the Docket on each attempt drops the old Redis connection pool
+    and re-resolves the URL. Without this, a Redis failover leaves the pool
+    pinned to the now-read-only replica and every rebuilt Worker keeps hitting
+    `ReadOnlyError` on the perpetual-task lock.
     """
     settings = get_current_settings().server.docket
     base_delay = settings.worker_reconnect_base_delay_seconds
@@ -81,21 +80,22 @@ async def _run_worker_with_reconnect(
 
     while not shutdown_event.is_set():
         try:
-            async with Worker(docket) as worker:
-                docket.register_collection(
-                    "prefect.server.api.background_workers:task_functions"
-                )
-                await register_and_schedule_perpetual_services(
-                    docket,
-                    ephemeral=ephemeral,
-                    webserver_only=webserver_only,
-                )
-                await worker.run_forever()
-                # Returned cleanly despite `forever=True`. Treat as a failure
-                # so we rebuild rather than exit the supervisor silently.
-                raise RuntimeError(
-                    "docket Worker.run_forever returned unexpectedly"
-                )
+            async with docket_factory() as docket:
+                async with Worker(docket) as worker:
+                    docket.register_collection(
+                        "prefect.server.api.background_workers:task_functions"
+                    )
+                    await register_and_schedule_perpetual_services(
+                        docket,
+                        ephemeral=ephemeral,
+                        webserver_only=webserver_only,
+                    )
+                    await worker.run_forever()
+                    # Returned cleanly despite `forever=True`. Treat as a failure
+                    # so we rebuild rather than exit the supervisor silently.
+                    raise RuntimeError(
+                        "docket Worker.run_forever returned unexpectedly"
+                    )
 
         except asyncio.CancelledError:
             raise
@@ -113,7 +113,8 @@ async def _run_worker_with_reconnect(
             delay = min(delay, max_delay)
 
             logger.error(
-                "docket worker failed (attempt %d): %s: %s. Restarting in %.1fs.",
+                "docket worker failed (attempt %d): %s: %s. "
+                "Rebuilding Docket and restarting in %.1fs.",
                 consecutive_failures,
                 type(exc).__name__,
                 exc,
@@ -130,19 +131,19 @@ async def _run_worker_with_reconnect(
 
 @asynccontextmanager
 async def background_worker(
-    docket: Docket,
+    docket_factory: Callable[[], Docket],
     ephemeral: bool = False,
     webserver_only: bool = False,
 ) -> AsyncGenerator[None, None]:
     shutdown_event = asyncio.Event()
     supervisor_task: asyncio.Task[None] = asyncio.create_task(
         _run_worker_with_reconnect(
-            docket,
+            docket_factory,
             ephemeral=ephemeral,
             webserver_only=webserver_only,
             shutdown_event=shutdown_event,
         ),
-        name=f"{docket.name} - worker-supervisor",
+        name="docket-worker-supervisor",
     )
 
     try:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 import pytest
@@ -19,14 +19,18 @@ from prefect.settings import get_current_settings
 
 
 @pytest.fixture
-async def docket() -> Docket:
+def docket_factory() -> Callable[[], Docket]:
+    """Factory yielding fresh Dockets for the supervisor to rebuild on each attempt."""
     settings = get_current_settings()
-    async with Docket(
-        name=f"test-docket-{uuid4().hex[:8]}",
-        url=settings.server.docket.url,
-        execution_ttl=timedelta(0),
-    ) as d:
-        yield d
+
+    def _make() -> Docket:
+        return Docket(
+            name=f"test-docket-{uuid4().hex[:8]}",
+            url=settings.server.docket.url,
+            execution_ttl=timedelta(0),
+        )
+
+    return _make
 
 
 def _patch_docket_settings(
@@ -140,7 +144,7 @@ def patch_register(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
 
 @pytest.mark.timeout(10)
 async def test_supervisor_rebuilds_worker_on_unexpected_exception(
-    docket: Docket,
+    docket_factory: Callable[[], Docket],
     patch_worker: type[_FakeWorker],
     patch_register: list[dict[str, Any]],
     fast_reconnect_settings: None,
@@ -151,7 +155,10 @@ async def test_supervisor_rebuilds_worker_on_unexpected_exception(
     shutdown = asyncio.Event()
     supervisor = asyncio.create_task(
         _run_worker_with_reconnect(
-            docket, ephemeral=False, webserver_only=False, shutdown_event=shutdown
+            docket_factory,
+            ephemeral=False,
+            webserver_only=False,
+            shutdown_event=shutdown,
         )
     )
 
@@ -178,7 +185,7 @@ async def test_supervisor_rebuilds_worker_on_unexpected_exception(
 
 @pytest.mark.timeout(10)
 async def test_supervisor_rebuilds_on_connection_error(
-    docket: Docket,
+    docket_factory: Callable[[], Docket],
     patch_worker: type[_FakeWorker],
     patch_register: list[dict[str, Any]],
     fast_reconnect_settings: None,
@@ -188,7 +195,10 @@ async def test_supervisor_rebuilds_on_connection_error(
     shutdown = asyncio.Event()
     supervisor = asyncio.create_task(
         _run_worker_with_reconnect(
-            docket, ephemeral=False, webserver_only=False, shutdown_event=shutdown
+            docket_factory,
+            ephemeral=False,
+            webserver_only=False,
+            shutdown_event=shutdown,
         )
     )
 
@@ -207,7 +217,7 @@ async def test_supervisor_rebuilds_on_connection_error(
 
 @pytest.mark.timeout(10)
 async def test_supervisor_treats_clean_return_as_failure(
-    docket: Docket,
+    docket_factory: Callable[[], Docket],
     patch_worker: type[_FakeWorker],
     patch_register: list[dict[str, Any]],
     fast_reconnect_settings: None,
@@ -218,7 +228,10 @@ async def test_supervisor_treats_clean_return_as_failure(
     shutdown = asyncio.Event()
     supervisor = asyncio.create_task(
         _run_worker_with_reconnect(
-            docket, ephemeral=False, webserver_only=False, shutdown_event=shutdown
+            docket_factory,
+            ephemeral=False,
+            webserver_only=False,
+            shutdown_event=shutdown,
         )
     )
 
@@ -237,7 +250,7 @@ async def test_supervisor_treats_clean_return_as_failure(
 
 @pytest.mark.timeout(10)
 async def test_supervisor_gives_up_after_max_attempts(
-    docket: Docket,
+    docket_factory: Callable[[], Docket],
     patch_worker: type[_FakeWorker],
     patch_register: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
@@ -253,7 +266,7 @@ async def test_supervisor_gives_up_after_max_attempts(
     shutdown = asyncio.Event()
     with pytest.raises(RuntimeError, match="simulated unexpected"):
         await _run_worker_with_reconnect(
-            docket,
+            docket_factory,
             ephemeral=False,
             webserver_only=False,
             shutdown_event=shutdown,
@@ -264,14 +277,16 @@ async def test_supervisor_gives_up_after_max_attempts(
 
 @pytest.mark.timeout(10)
 async def test_background_worker_cancels_supervisor_on_shutdown(
-    docket: Docket,
+    docket_factory: Callable[[], Docket],
     patch_worker: type[_FakeWorker],
     patch_register: list[dict[str, Any]],
     fast_reconnect_settings: None,
 ) -> None:
     _FakeWorker.behaviors = [_never]
 
-    async with background_worker(docket, ephemeral=False, webserver_only=False):
+    async with background_worker(
+        docket_factory, ephemeral=False, webserver_only=False
+    ):
         # Give the supervisor a tick to construct the Worker.
         for _ in range(500):
             if _FakeWorker.instances and _FakeWorker.instances[0].run_forever_calls == 1:
